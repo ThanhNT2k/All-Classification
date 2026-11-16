@@ -1,0 +1,6 @@
+# E4 — MobileNetV3-Large (pretrained ImageNet, mô hình nhẹ), ảnh màu
+base: base.yaml
+model:
+  name: mobilenetv3_large_100
+train:
+  lr: 1.0e-3

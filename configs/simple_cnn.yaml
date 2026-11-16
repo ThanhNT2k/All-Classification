@@ -1,0 +1,10 @@
+# E1 — CNN tự xây dựng, huấn luyện từ đầu (không dùng trọng số pretrained), ảnh màu
+base: base.yaml
+model:
+  name: simple_cnn
+  pretrained: false
+  drop_rate: 0.3
+train:
+  epochs: 60                  # học từ đầu cần nhiều epoch hơn
+  lr: 1.0e-3
+  early_stopping_patience: 12

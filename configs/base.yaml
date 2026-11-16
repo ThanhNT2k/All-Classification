@@ -1,0 +1,30 @@
+# Cấu hình gốc — các file khác kế thừa qua "base: base.yaml" và chỉ ghi phần khác biệt.
+data:
+  root: data/raw              # tương đối so với thư mục dự án
+  splits: data/splits         # train.csv / val.csv / test.csv
+  image_size: 224
+  color_mode: rgb             # rgb | gray
+  stain_norm: none            # none | reinhard
+  cache_in_memory: true
+  num_workers: 2
+augment:
+  hflip: true
+  vflip: true
+  rotate90: true
+  color_jitter: 0.1           # 0 = tắt
+model:
+  name: resnet50              # tên model trong thư viện timm
+  pretrained: true            # trọng số ImageNet
+  drop_rate: 0.2
+train:
+  epochs: 30
+  batch_size: 32
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  label_smoothing: 0.0
+  class_weights: true         # bù mất cân bằng lớp (Benign ít ảnh hơn)
+  early_stopping_patience: 7  # dừng nếu macro-F1 trên val không tăng sau 7 epoch
+  amp: true                   # mixed precision trên GPU
+  seed: 42
+eval:
+  bootstrap: 1000             # số lần lặp bootstrap cho khoảng tin cậy 95%

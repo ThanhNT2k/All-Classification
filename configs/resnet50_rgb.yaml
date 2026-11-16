@@ -1,0 +1,2 @@
+# E2 — ResNet50 (pretrained ImageNet), ảnh màu
+base: base.yaml

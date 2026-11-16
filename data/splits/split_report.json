@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-10-21T07:04:21",
+  "data_root": "/sessions/rcw-01gdgngcjzjuiqy639y19knr/mnt/All-Classification/data/raw",
+  "variant": "Original",
+  "seed": 42,
+  "ratios": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15
+  },
+  "grouping": "duplicates + same-stem-across-variants",
+  "skipped_unreadable_or_unlabeled": 0,
+  "label_conflict_groups": 0,
+  "label_conflicts_excluded": true,
+  "n_groups": 3169,
+  "n_multi_image_groups": 85,
+  "distribution": {
+    "train": {
+      "Benign": 353,
+      "Early": 689,
+      "Pre": 674,
+      "Pro": 563,
+      "total": 2279
+    },
+    "val": {
+      "Benign": 76,
+      "Early": 148,
+      "Pre": 145,
+      "Pro": 121,
+      "total": 490
+    },
+    "test": {
+      "Benign": 75,
+      "Early": 148,
+      "Pre": 144,
+      "Pro": 120,
+      "total": 487
+    }
+  },
+  "leakage_check": {
+    "exact_duplicate_leaks": 0,
+    "near_duplicate_leaks": 0,
+    "near_duplicate_leak_examples": [],
+    "passed": true
+  }
+}

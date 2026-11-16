@@ -1,0 +1,4 @@
+# C1 — Kiểm tra lối tắt màu: bỏ màu (ảnh xám). Nếu lớp Pro giảm mạnh -> mô hình dựa vào màu.
+base: base.yaml
+data:
+  color_mode: gray

@@ -1,0 +1,4 @@
+# C3 — Giảm phụ thuộc màu: chuẩn hóa màu nhuộm Reinhard
+base: base.yaml
+data:
+  stain_norm: reinhard

@@ -1,0 +1,4 @@
+# C2 — Giảm phụ thuộc màu: nhiễu màu mạnh khi huấn luyện
+base: base.yaml
+augment:
+  color_jitter: 0.4

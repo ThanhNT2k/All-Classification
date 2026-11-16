@@ -1,0 +1,12 @@
+# Dữ liệu và kết quả không đưa lên git
+data/raw/*
+!data/raw/.gitkeep
+results/*
+!results/.gitkeep
+*.pt
+*.pth
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+
+colab_bundle.zip

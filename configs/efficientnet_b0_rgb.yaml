@@ -1,0 +1,6 @@
+# E3 — EfficientNet-B0 (pretrained ImageNet), ảnh màu
+base: base.yaml
+model:
+  name: efficientnet_b0
+train:
+  lr: 1.0e-3
