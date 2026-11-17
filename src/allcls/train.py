@@ -122,6 +122,59 @@ def benchmark_inference(model, device, image_size: int, amp: bool) -> dict:
             "benchmark_device": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"}
 
 
+def _partial_blocks(model, name: str):
+    """Các khối cuối được mở khóa khi tinh chỉnh một phần (cùng với đầu phân loại)."""
+    if name.startswith("resnet"):
+        return [model.layer4]                                            # conv5_x
+    if name.startswith("efficientnet"):
+        return [model.blocks[-1], model.conv_head, model.bn2]            # giai đoạn 8-9
+    if name.startswith("mobilenetv2"):
+        return [model.blocks[-2], model.blocks[-1], model.conv_head, model.bn2]   # từ khối 160 kênh
+    raise ValueError(f"chưa định nghĩa tinh chỉnh một phần cho {name}")
+
+
+def apply_strategy(model, name: str, strategy: str):
+    """full: huấn luyện toàn bộ. feature_extraction: chỉ đầu phân loại. partial: đầu phân loại + khối cuối.
+    Trả về danh sách module được huấn luyện (None = toàn bộ). Phần đóng băng giữ BatchNorm ở chế độ suy luận."""
+    if strategy in (None, "full"):
+        return None
+    if strategy not in ("feature_extraction", "partial"):
+        raise ValueError(f"train.strategy không hợp lệ: {strategy}")
+    for prm in model.parameters():
+        prm.requires_grad = False
+    trainable = [model.get_classifier()]
+    if strategy == "partial":
+        trainable += _partial_blocks(model, name)
+    for m in trainable:
+        for prm in m.parameters():
+            prm.requires_grad = True
+    return trainable
+
+
+def _train_mode(model, trainable):
+    if trainable is None:
+        model.train()
+    else:
+        model.eval()
+        for m in trainable:
+            m.train()
+
+
+def _subsample_train(ds, fraction: float, seed: int = 0):
+    """Giữ lại một phần tập train, phân tầng theo lớp (kịch bản giảm lượng dữ liệu huấn luyện)."""
+    rng = np.random.default_rng(seed)
+    lab = np.asarray(ds.labels)
+    keep = []
+    for c in np.unique(lab):
+        idx = np.flatnonzero(lab == c)
+        keep += rng.choice(idx, max(1, round(fraction * len(idx))), replace=False).tolist()
+    keep.sort()
+    for attr in ("rel_paths", "labels", "paths"):
+        setattr(ds, attr, [getattr(ds, attr)[i] for i in keep])
+    if ds._cache is not None:
+        ds._cache = [ds._cache[i] for i in keep]
+
+
 def run(config, out_root="results/runs", smoke: bool = False, seed: int | None = None) -> Path:
     """config: đường dẫn file YAML hoặc dict. smoke=True: chạy thử vài batch để bắt lỗi.
     seed: ghi đè train.seed (dùng khi lặp lại thí nghiệm với nhiều seed)."""
@@ -172,6 +225,9 @@ def run(config, out_root="results/runs", smoke: bool = False, seed: int | None =
                           build_transforms(cfg, train=(s == "train"), stain_normalizer=stain),
                           cache_in_memory=cache)
           for s in ("train", "val", "test")}
+    fraction = float(d.get("train_fraction", 1.0))
+    if fraction < 1.0:
+        _subsample_train(ds["train"], fraction)
     nw = int(d.get("num_workers", 2))
     bs = int(tr.get("batch_size", 32))
     loader_kw = dict(num_workers=nw, pin_memory=device.type == "cuda", persistent_workers=nw > 0)
@@ -194,13 +250,14 @@ def run(config, out_root="results/runs", smoke: bool = False, seed: int | None =
 
     # ----- mô hình, loss, tối ưu -----
     model = create_model(cfg, len(CLASSES)).to(device)
+    trainable = apply_strategy(model, cfg["model"]["name"], tr.get("strategy", "full"))
     counts = np.bincount(ds["train"].labels, minlength=len(CLASSES))
     weight = None
     if tr.get("class_weights", True):
         weight = torch.tensor(counts.sum() / (len(CLASSES) * np.maximum(counts, 1)),
                               dtype=torch.float32, device=device)
     criterion = nn.CrossEntropyLoss(weight=weight, label_smoothing=float(tr.get("label_smoothing", 0)))
-    opt = torch.optim.AdamW(model.parameters(), lr=float(tr["lr"]),
+    opt = torch.optim.AdamW([prm for prm in model.parameters() if prm.requires_grad], lr=float(tr["lr"]),
                             weight_decay=float(tr.get("weight_decay", 0)))
     epochs = int(tr["epochs"])
     steps_per_epoch = min(len(loaders["train"]), limit or 10**9)
@@ -218,7 +275,7 @@ def run(config, out_root="results/runs", smoke: bool = False, seed: int | None =
     history = []
     for epoch in range(1, epochs + 1):
         t0 = time.time()
-        model.train()
+        _train_mode(model, trainable)
         tot_loss, correct, seen = 0.0, 0, 0
         for b, (x, y, _) in enumerate(loaders["train"]):
             if limit is not None and b >= limit:
@@ -271,6 +328,7 @@ def run(config, out_root="results/runs", smoke: bool = False, seed: int | None =
                "model": cfg["model"]["name"],
                "efficiency": {
                    "params": int(n_params),
+                   "trainable_params": int(sum(prm.numel() for prm in model.parameters() if prm.requires_grad)),
                    "model_size_mb": round((run_dir / "best.pt").stat().st_size / 1e6, 1),
                    "train_minutes": round(train_seconds / 60, 2),
                    "sec_per_epoch": round(train_seconds / max(len(history), 1), 1),
