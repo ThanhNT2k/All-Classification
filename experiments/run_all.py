@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from allcls.compare import build_report, find_runs  # noqa: E402
+from allcls.config import load_config  # noqa: E402
 from allcls.experiments import EXPERIMENTS  # noqa: E402
 from allcls.train import run  # noqa: E402
 
@@ -28,6 +29,8 @@ if __name__ == "__main__":
     ap.add_argument("--skip-done", action="store_true")
     ap.add_argument("--color-baseline", default=None, help="thư mục kết quả color_baseline")
     ap.add_argument("--compare-only", action="store_true")
+    ap.add_argument("--data-root", default=None, help="thư mục ảnh (chứa Original/), ghi đè data.root")
+    ap.add_argument("--num-workers", type=int, default=None, help="ghi đè data.num_workers (Windows: 0)")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -43,5 +46,10 @@ if __name__ == "__main__":
                     print(f"Bỏ qua {code} {name} seed {seed}: đã có ({done.name})")
                     continue
                 print(f"\n===== {code} {title} — seed {seed} =====", flush=True)
-                run(ROOT / "configs" / f"{name}.yaml", out, seed=seed)
+                cfg = load_config(ROOT / "configs" / f"{name}.yaml")
+                if a.data_root:
+                    cfg["data"]["root"] = str(Path(a.data_root).resolve())
+                if a.num_workers is not None:
+                    cfg["data"]["num_workers"] = a.num_workers
+                run(cfg, out, seed=seed)
     print(build_report(out, a.color_baseline))

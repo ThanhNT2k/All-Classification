@@ -32,6 +32,12 @@ class SimpleCNN(nn.Module):
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
 
+    # Tách 2 nửa giống quy ước của timm để Grad-CAM (explain.py) dùng chung cho mọi mô hình.
+    def forward_features(self, x: torch.Tensor) -> torch.Tensor:
+        return self.features(x)
+
+    def forward_head(self, feats: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.dropout(self.pool(feats).flatten(1)))
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pool(self.features(x)).flatten(1)
-        return self.classifier(self.dropout(x))
+        return self.forward_head(self.forward_features(x))

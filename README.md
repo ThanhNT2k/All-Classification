@@ -60,7 +60,7 @@ Chạy trên bộ dữ liệu **giả lập** có cài sẵn ảnh trùng, ảnh
 configs/          cấu hình thí nghiệm (YAML)
 data/raw/         dữ liệu gốc từ Kaggle (không đưa lên git)
 data/splits/      train/val/test.csv + báo cáo chia tập
-scripts/          lệnh chạy: audit_data.py, split_data.py
+scripts/          lệnh chạy: audit_data.py, split_data.py, train.py, compare_models.py, explain.py
 src/allcls/data/  discover (tìm ảnh + nhãn), hashing, audit, split, dataset, transforms
 src/allcls/       models/, train.py, evaluate.py, explain.py (Grad-CAM)
 experiments/      chạy nhiều cấu hình
@@ -104,6 +104,63 @@ chia tập, lịch sử huấn luyện, trọng số tốt nhất, dự đoán t
 
 Chạy 1 seed: giá trị kèm KTC 95% (bootstrap). Chạy nhiều seed (`--seeds 42 43 44`): trung bình ± độ lệch chuẩn.
 
+## Bước 5 — Giải thích mô hình
+
+```bash
+python scripts/explain.py --runs results/runs                      # mọi thí nghiệm đã chạy xong (seed 42)
+python scripts/explain.py --runs results/runs --only resnet50_rgb  # một thí nghiệm
+```
+
+Mỗi lần chạy có thêm thư mục `explain/`; nhiều lần chạy thì có bảng tổng hợp `results/runs/EXPLAIN.md`.
+
+| File | Nội dung |
+|---|---|
+| `errors_gradcam_*.png` | Mọi ảnh test bị sai: ảnh gốc · Grad-CAM lớp dự đoán · Grad-CAM lớp thật |
+| `correct_gradcam.png` | Ảnh đúng mỗi lớp (tự tin nhất / kém tự tin nhất) kèm Grad-CAM |
+| `mask_check.png`, `cells_erased_check.png`, `background_erased_check.png` | Mặt nạ bạch cầu ước lượng, ảnh sau khi xóa tế bào, ảnh sau khi xóa nền — xem bằng mắt trước khi tin số liệu |
+| `summary.md`, `per_image.csv` | Bảng tổng hợp và số liệu từng ảnh |
+
+Ngoài hình Grad-CAM có năm phép đo định lượng, vì bản đồ nhiệt chỉ nhìn bằng mắt thì dễ diễn giải theo ý muốn:
+
+1. **Grad-CAM trong tế bào** — phần "chú ý" rơi vào vùng bạch cầu so với diện tích vùng đó (tỷ số > 1 = tập trung vào tế bào).
+2. **Che vùng** — che 20% ô lưới Grad-CAM cao nhất, so với che 20% ô ngẫu nhiên: Grad-CAM có chỉ đúng vùng mô hình dùng không.
+3. **Xóa tế bào** — tô mọi bạch cầu bằng màu nền rồi dự đoán lại. Vẫn đúng = mô hình không cần hình thái tế bào (lối tắt nền/màu nhuộm).
+4. **Xóa nền** — giữ bạch cầu, tô phần còn lại bằng màu nền phẳng. Vẫn đúng = chỉ tế bào đã đủ thông tin.
+5. **Ảnh trắng đen** — đổi ảnh test sang trắng đen rồi dự đoán. Giảm mạnh = mô hình phụ thuộc vào màu.
+
+Grad-CAM tự cài đặt trong `src/allcls/explain.py` (không cần thư viện ngoài), lấy ở bản đồ đặc trưng cuối
+(7×7 với ResNet50/EfficientNet/MobileNetV3, 14×14 với CNN tự xây dựng).
+
+### Kết quả bước 5 trên dữ liệu thật (17/11/2026, seed 42, tập test 487 ảnh)
+
+Huấn luyện trên máy cục bộ (RTX 3060): `python experiments/run_all.py --skip-done --data-root ../data --num-workers 0`.
+Bảng đầy đủ: `results/runs/EXPLAIN.md`; hình so sánh: `results/runs/explain_compare_gradcam.png`.
+
+| Mô hình | Sai | Ảnh gốc | Xóa bạch cầu (chỉ còn nền) | Xóa nền (chỉ còn bạch cầu) | Ảnh trắng đen |
+|---|---:|---:|---:|---:|---:|
+| E1 CNN tự xây dựng | 1 | 99,8% | 76,9% | 40,8% | 40,2% |
+| E2 ResNet50 | 2 | 99,6% | 97,3% | 41,2% | 56,7% |
+| E3 EfficientNet-B0 | 3 | 99,4% | 90,9% | 24,1% | 61,4% |
+| E4 MobileNetV3-Large | 4 | 99,2% | 93,0% | 57,3% | 56,5% |
+| C1 ResNet50 ảnh xám | 3 | 99,4% | 93,2% | 39,6% | 99,4% |
+| C2 ResNet50 nhiễu màu mạnh | 1 | 99,8% | 88,0% | 36,9% | 91,2% |
+| C3 ResNet50 chuẩn hóa Reinhard | 2 | 99,6% | 75,3% | 41,2% | 76,6% |
+
+Các cột là accuracy trên tập test (ngẫu nhiên 4 lớp = 25%), cùng một mô hình, không huấn luyện lại.
+
+- **Nền đủ để đoán đúng, bạch cầu thì không.** Xóa hết bạch cầu, mô hình vẫn đúng 75–97%; giữ bạch cầu mà xóa nền
+  thì chỉ còn 24–57%, và phần lớn ảnh bị dồn về Benign (ResNet50: Early 0%, Pro 0%). Lớp được nhận ra chủ yếu từ
+  nền và hồng cầu, không phải từ hình thái tế bào blast → accuracy ~99% trên bộ này không chứng minh mô hình học hình thái.
+- **Mô hình huấn luyện bằng ảnh màu phụ thuộc mạnh vào màu:** đổi ảnh test sang trắng đen làm E1–E4 tụt còn 40–61%.
+  Nhiễu màu mạnh khi huấn luyện (C2) giữ được 91,2%.
+- **Nhưng bỏ màu không loại được lối tắt:** mô hình huấn luyện bằng ảnh xám (C1) vẫn đúng 93,2% khi không còn bạch cầu
+  và chỉ 39,6% khi chỉ còn bạch cầu → lối tắt nằm cả ở kết cấu nền (hình dạng, độ nét hồng cầu), không chỉ ở màu.
+- Ảnh sai: 8/487 ảnh bị ít nhất một mô hình đoán sai, không ảnh nào bị cả 7 cùng sai. 7/8 là Early hoặc Pre bị
+  đoán thành Benign (ca ác tính bị bỏ sót); các ảnh Early này có nền giống ảnh Benign.
+- Giới hạn: mặt nạ bạch cầu ước lượng bằng ngưỡng màu (2/487 ảnh không tách được); ảnh đã xóa tế bào / xóa nền nằm
+  ngoài phân phối huấn luyện, nên con số "xóa nền" thấp một phần vì ảnh trông lạ với mô hình; màu nền phẳng lấy từ
+  chính ảnh đó nên vẫn còn mang tông màu của lớp; một seed.
+
 ## Lộ trình
 
 - [x] Bước 1: kiểm kê dữ liệu, chia tập chống rò rỉ (đã chạy trên dữ liệu thật)
@@ -111,7 +168,7 @@ Chạy 1 seed: giá trị kèm KTC 95% (bootstrap). Chạy nhiều seed (`--seed
 - [x] Bước 3: Code huấn luyện E1–E4, C1–C3 + baseline màu E0 (E0 đã chạy; còn lại chờ chạy trên Colab)
 - [x] So sánh mô hình: bảng, kiểm định McNemar, biểu đồ
 - [x] Bước 4: Đánh giá — accuracy, macro F1, độ nhạy ác tính, AUC, KTC 95% bootstrap
-- [ ] Bước 5: Giải thích — Grad-CAM, phân tích ảnh bị phân loại sai
+- [x] Bước 5: Giải thích — Grad-CAM, phân tích ảnh bị phân loại sai, kiểm tra mô hình nhìn vào đâu
 
 ## Kết quả kiểm kê dữ liệu thật (21/10/2026)
 
