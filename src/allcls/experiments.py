@@ -6,6 +6,7 @@ EXPERIMENTS = [
     ("resnet50_rgb", "E2", "ResNet50", "model"),
     ("efficientnet_b0_rgb", "E3", "EfficientNet-B0", "model"),
     ("mobilenetv3_rgb", "E4", "MobileNetV3-Large", "model"),
+    ("mobilenetv2_rgb", "E5", "MobileNetV2", "model"),
     ("resnet50_gray", "C1", "ResNet50 – ảnh xám", "color"),
     ("resnet50_strong_jitter", "C2", "ResNet50 – nhiễu màu mạnh", "color"),
     ("resnet50_stainnorm", "C3", "ResNet50 – chuẩn hóa màu Reinhard", "color"),

@@ -1,0 +1,4 @@
+# E5 — MobileNetV2 (mô hình dùng trong báo cáo), pretrained ImageNet
+base: base.yaml
+model:
+  name: mobilenetv2_100
